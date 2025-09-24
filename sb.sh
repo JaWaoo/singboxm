@@ -1,4 +1,3 @@
-
 # ==== 自动检测 acme.sh 路径 ====
 if [ -x "/root/.acme.sh/acme.sh" ]; then
   ACME_BIN="/root/.acme.sh/acme.sh"
@@ -85,7 +84,7 @@ gen_certificate_selfsigned(){
 }
 
 apply_certificate_menu(){
-  
+
 
   if [[ -s "$SB_CFG" ]]; then
     local cpath
@@ -158,7 +157,7 @@ choose_port(){
   while true; do
     local p
     readp "设置 Hysteria2 端口[1-65535]（回车随机）：" p || true
-    
+    echo "VLESS使用默认443端口，若需要修改，请修改脚本！"
     if [[ -z "$p" ]]; then
       p="$(shuf -i 10000-65535 -n 1)"
     fi
@@ -194,7 +193,7 @@ EOF
 load_cert_from_config(){
   if [[ -s "$SB_CFG" ]]; then
     local cpath kpath
-    cpath="$(jq -r '.inbounds[]? | select(.type=="hysteria2") | .tls.certificate_path' "$SB_CFG" | head -n1)"
+    cpath="$(jq -r '.inbounds[]? | select(.type=="hysteria2") | .tls.certificate_path' "$SB_CFG" | head -n1 2>/dev/null || true)"
     kpath="$(jq -r '.inbounds[0].tls.key_path // empty' "$SB_CFG")"
     if [[ -n "$cpath" && -n "$kpath" ]]; then
       CERT_CRT="$cpath"; CERT_KEY="$kpath"
@@ -213,6 +212,8 @@ make_hy2_config(){
   "inbounds": [{
     "type": "hysteria2","listen": "::","listen_port": $port,
     "users":[{"password":"$passwd"}],
+    "up_mbps": 1000,
+    "down_mbps": 1000,
     "tls":{"enabled":true,"alpn":["h3"],
     "certificate_path":"$CERT_CRT","key_path":"$CERT_KEY"}
   }],
@@ -220,12 +221,76 @@ make_hy2_config(){
 }
 JSON
   jq . "$SB_CFG" >/dev/null || { red "配置生成失败"; return 0; }
-  local serip="$(curl -s4m5 icanhazip.com || curl -s6m5 icanhazip.com)"
-  local sni insecure
-  if [[ "$CERT_CRT" == *"/selfsigned/"* ]]; then sni="www.bing.com"; insecure="true"
-  else sni="$(basename "$(dirname "$CERT_CRT")")"; insecure="false"; fi
-  echo "hysteria2://$passwd@$serip:$port?security=tls&alpn=h3&insecure=$insecure&sni=$sni#Hy2" > "$SB_DIR/hy2.txt"
+  local domain
+if [[ "$CERT_CRT" == *"/selfsigned/"* ]]; then
+    domain="www.bing.com"
+    insecure="true"
+else
+    domain="$(basename "$(dirname "$CERT_CRT")")"
+    insecure="false"
+fi
+
+echo "hysteria2://$passwd@$domain:$port?security=tls&alpn=h3&insecure=$insecure&sni=$domain&upmbps=1000&downmbps=1000#Hy2" > "$SB_DIR/hy2.txt"
+
 }
+
+# ==== 新增 VLESS 相关函数（仅增加，不修改原有逻辑） ====
+make_vless_config(){
+  local port="443"
+  local uuid
+  if "$SB_BIN" >/dev/null 2>&1; then
+    uuid="$($SB_BIN generate uuid)"
+  else
+    uuid="$(cat /proc/sys/kernel/random/uuid)"
+  fi
+  green "已生成 VLESS UUID：$uuid"
+
+  # 构造 VLESS inbound
+  local vless_inbound=$(cat <<JSON
+{
+  "type": "vless",
+  "listen": "::",
+  "listen_port": $port,
+  "users": [
+    {"uuid": "$uuid"}
+  ],
+  "tls": {
+    "enabled": true,
+    "certificate_path": "$CERT_CRT",
+    "key_path": "$CERT_KEY",
+    "alpn": ["http/1.1"]
+  },
+  "transport": {
+    "type": "ws",
+    "path": "/$uuid"
+  }
+}
+JSON
+)
+
+  # 使用 jq 追加到原 config.json
+  tmpfile=$(mktemp)
+  jq --argjson inbound "$vless_inbound" '.inbounds += [$inbound]' "$SB_CFG" > "$tmpfile" && mv "$tmpfile" "$SB_CFG"
+
+  # 节点链接
+  local serip="$(curl -s4m5 icanhazip.com || curl -s6m5 icanhazip.com)"
+  local sni
+  if [[ "$CERT_CRT" == *"/selfsigned/"* ]]; then
+    sni="www.bing.com"
+  else
+    sni="$(basename "$(dirname "$CERT_CRT")")"
+  fi
+local domain
+if [[ "$CERT_CRT" == *"/selfsigned/"* ]]; then
+    domain="www.bing.com"
+else
+    domain="$(basename "$(dirname "$CERT_CRT")")"
+fi
+
+echo "vless://$uuid@$domain:$port?encryption=none&security=tls&alpn=h2%2Chttp%2F1.1&fp=chrome&type=ws&path=/$uuid&sni=$domain#WS" > "$SB_DIR/vless.txt"
+}
+
+# ==== 新增结束 ====
 
 start_singbox(){
   systemctl restart sing-box || systemctl start sing-box
@@ -237,11 +302,11 @@ show_result(){
 
   if [[ -s "$SB_DIR/hy2.txt" ]]; then
     echo
-    green "=============== 以下为Hy2节点相关信息 ==============="
+    green "================================================="
     echo
     yellow "Hysteria2 节点二维码："
     echo
-    
+
     if command -v qrencode >/dev/null 2>&1; then
       qrencode -o - -t ANSIUTF8 "$(cat "$SB_DIR/hy2.txt")"
     fi
@@ -251,8 +316,26 @@ show_result(){
     echo
     cat "$SB_DIR/hy2.txt"
     echo
-    green "=============== 以上为Hy2节点相关信息 ==============="
+    green "================================================"
     echo
+     # ==== 新增：显示 VLESS 节点信息（仅增加输出，不改原有 Hy2 部分） ====
+  if [[ -s "$SB_DIR/vless.txt" ]]; then
+    echo
+    echo
+    yellow "VLESS 节点二维码："
+    echo
+    if command -v qrencode >/dev/null 2>&1; then
+      qrencode -o - -t ANSIUTF8 "$(cat "$SB_DIR/vless.txt")"
+    fi
+    echo
+    yellow "VLESS 节点链接："
+    echo
+    cat "$SB_DIR/vless.txt"
+    echo
+    green "=============================================="
+    echo
+  fi
+  # ==== 新增结束 ====
 
     if [[ -s "$SB_CFG" ]]; then
       local cpath kpath
@@ -264,13 +347,23 @@ show_result(){
       echo
     fi
 
-    LAST_MSG="✅ Hy2节点信息已输出"
+    LAST_MSG="✅ Hy2 和 Vless 节点信息已输出"
   else
-    yellow "未检测到Hy2节点"
-    LAST_MSG="❌ 未检测到Hy2节点"
+    yellow "未检测到 Hy2 和 Vless 节点"
+    LAST_MSG="❌ 未检测到 Hy2 和 Vless 节点"
+  fi
+
+ 
+
+  if [[ -s "$SB_CFG" ]]; then
+    local cpath kpath
+    cpath="$(jq -r '.inbounds[]? | select(.type=="hysteria2") | .tls.certificate_path' "$SB_CFG" 2>/dev/null | head -n1 || true)"
+    kpath="$(jq -r '.inbounds[0].tls.key_path // empty' "$SB_CFG")"
+    if [[ -n "$cpath" && -n "$kpath" ]]; then
+      CERT_CRT="$cpath"; CERT_KEY="$kpath"
+    fi
   fi
 }
-
 
 uninstall_all(){
   systemctl stop sing-box 2>/dev/null || true
@@ -330,11 +423,14 @@ install_flow() {
   fi
 
   # 是否立即生成节点
-  readp "是否立即生成 Hysteria2 节点？(y/n)： " ans
+  readp "是否立即生成 Hysteria2 和 Vless 节点？(y/n)： " ans
   clear
   history -c
   if [[ "$ans" =~ [yY] ]]; then
     make_hy2_config "$port" "$uuid"
+    # ==== 新增：在 Hy2 生成后追加生成 VLESS 配置（不改动原有 Hy2 逻辑） ====
+    make_vless_config "$port" "$uuid" || true
+    # ==== 新增结束 ====
     ensure_service
     start_singbox
     show_result
@@ -444,6 +540,9 @@ generate_node(){
 
   # 生成配置并启动服务
   make_hy2_config "$port"
+  # ==== 新增：生成 VLESS（在主配置已经存在后追加） ====
+  make_vless_config "$port" || true
+  # ==== 新增结束 ====
   ensure_service
   if start_singbox; then
     show_result
@@ -618,7 +717,7 @@ update_singbox_kernel(){
   esac
 }
 menu(){
-  
+
   while true; do
     clear
     show_status
@@ -633,7 +732,7 @@ menu(){
     echo
     echo -e "\033[31m$(printf "%*s" "72" "" | tr " " "-")\033[0m"
   fi
-green "============ Sing-box (Hysteria2 ONLY) ============"
+green "============ Sing-box (Hysteria2 & Vless) ============"
 echo
 
     if [[ -s "$SB_CFG" ]]; then
@@ -651,7 +750,7 @@ echo
         fi
       fi
     fi
-    
+
 echo -e "[35m1)[0m [32m安装 / 更新 Sing-box[0m"
 echo -e "[35m2)[0m [32m查看节点信息[0m"
 echo -e "[35m3)[0m [32m卸载 Sing-box 及配置[0m"
@@ -660,7 +759,7 @@ echo -e "[35m5)[0m [32m更新 Sing-box 内核版本[0m"
 
     echo -e "\033[35m0)\033[0m \033[32m退出 (退出脚本)\033[0m"
     echo
-    
+
     readp "请选择【0-5】： " sel
     case "${sel:-}" in
       1)
@@ -706,7 +805,3 @@ echo -e "[35m5)[0m [32m更新 Sing-box 内核版本[0m"
 }
 
 menu
-
-
-
-
