@@ -19,6 +19,7 @@ set_feedback() {
 
 LAST_MSG="每天都是快乐开心健康富足的一天！！！~O(∩_∩)O哈哈~"
 
+
 #!/bin/bash
 set -euo pipefail
 
@@ -230,7 +231,7 @@ else
     insecure="false"
 fi
 
-echo "hysteria2://$passwd@$domain:$port?security=tls&alpn=h3&insecure=$insecure&sni=$domain&upmbps=1000&downmbps=1000#Hy2" > "$SB_DIR/hy2.txt"
+echo "hysteria2://$passwd@$domain:$port?security=tls&alpn=h3&insecure=$insecure&sni=$domain&upmbps=1000&downmbps=1000#$mname-Hy2" > "$SB_DIR/hy2.txt"
 
 }
 
@@ -262,7 +263,7 @@ make_vless_config(){
   },
   "transport": {
     "type": "ws",
-    "path": "/$uuid"
+    "path": "/files/transfer"
   }
 }
 JSON
@@ -287,7 +288,7 @@ else
     domain="$(basename "$(dirname "$CERT_CRT")")"
 fi
 
-echo "vless://$uuid@$domain:$port?encryption=none&security=tls&alpn=h2%2Chttp%2F1.1&fp=chrome&type=ws&path=/$uuid&sni=$domain#WS" > "$SB_DIR/vless.txt"
+echo "vless://$uuid@$domain:$port?encryption=none&security=tls&alpn=h2%2Chttp%2F1.1&fp=chrome&type=ws&path=/files/transfer&sni=$domain#$mname-WS" > "$SB_DIR/vless.txt"
 }
 
 # ==== 新增结束 ====
@@ -390,6 +391,16 @@ install_flow() {
     LAST_MSG="❌ 安装流程取消"
     return 0
   fi
+  
+# =========================
+# 定义颜色
+GREEN='\033[0;32m'
+NC='\033[0m' # 无颜色
+# =========================
+# 输入节点备注
+echo -e "${GREEN}请输入机器名称 (默认: vps):${NC}"
+read mname
+mname=${mname:-vps}
 
   # 选择端口
   readp "设置 Hysteria2 端口[1-65535]（回车随机）： " port
