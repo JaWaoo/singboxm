@@ -43,7 +43,7 @@ echo "▶ 开始申请证书（HTTP-01 / 80端口）"
   -d "$DOMAIN" \
   --standalone \
   -k ec-256 \
-  --server letsencrypt
+  --server letsencrypt\
   --force
 # ========= 安装证书 =========
 echo "▶ 安装证书到 $CERT_DIR"
