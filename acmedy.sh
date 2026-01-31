@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -e
-
+#颜色
+green="\e[1;32m"
+yellow="\e[1;33m"
+green() { echo -e "\e[1;32m$1\033[0m"; }
+yellow() { echo -e "\e[1;33m$1\033[0m"; }
 # ========= 基础检查 =========
 [[ $EUID -ne 0 ]] && echo "❌ 请以 root 用户运行" && exit 1
 
