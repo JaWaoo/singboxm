@@ -46,7 +46,7 @@ echo "▶ 安装证书到 $CERT_DIR"
   --key-file       "$CERT_DIR/private.key" \
   --fullchain-file "$CERT_DIR/cert.crt" \
   --ecc
-
+echo "$DOMAIN" > /root/ygkkkca/ca.log
 # ========= 完成 =========
 echo
 echo "✅ 证书申请完成"
