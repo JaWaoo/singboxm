@@ -27,7 +27,6 @@ echo
 if [[ ! -d ~/.acme.sh ]]; then
   echo "▶ 安装 acme.sh ..."
   curl -fsSL https://get.acme.sh | sh
-  ~/.acme.sh/acme.sh --install
 fi
 
 # ========= 显式注册账号（关键修复点） =========
