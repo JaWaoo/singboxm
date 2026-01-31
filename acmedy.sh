@@ -26,7 +26,7 @@ echo
 # ========= 安装 acme.sh（安全方式） =========
 if [[ ! -x ~/.acme.sh/acme.sh ]]; then
   echo "▶ 安装 acme.sh ..."
-  curl -fsSL https://get.acme.sh | sh -s email="$EMAIL"
+  curl -fsSL https://get.acme.sh | sh -s email="mailto:$EMAIL"
 fi
 
 # ========= 申请证书（HTTP-01） =========
