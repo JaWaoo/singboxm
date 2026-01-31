@@ -8,10 +8,13 @@ command -v curl >/dev/null || { echo "❌ 未安装 curl"; exit 1; }
 command -v socat >/dev/null || { echo "❌ 未安装 socat"; exit 1; }
 
 # ========= 用户输入 =========
-read -rp "请输入要申请证书的域名（已解析到本机IP）: " DOMAIN
+read -rp "$(yellow '请输入要申请证书的域名（已解析到本机IP）: ')" DOMAIN
 [[ -z "$DOMAIN" ]] && echo "❌ 域名不能为空" && exit 1
 
-read -rp "请输入注册邮箱（回车自动生成）: " EMAIL
+yellow "================================="
+
+read -rp "$(yellow '请输入注册邮箱（回车自动生成）: ')" EMAIL
+
 if [[ -z "$EMAIL" ]]; then
   EMAIL="$(date +%s | sha256sum | cut -c1-6)@gmail.com"
 fi
