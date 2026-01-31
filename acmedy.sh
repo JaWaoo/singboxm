@@ -23,11 +23,15 @@ echo "✔ 域名: $DOMAIN"
 echo "✔ 邮箱: $EMAIL"
 echo
 
-# ========= 安装 acme.sh（安全方式） =========
-if [[ ! -x ~/.acme.sh/acme.sh ]]; then
+# ========= 安装并【完整初始化】 acme.sh =========
+if [[ ! -d ~/.acme.sh ]]; then
   echo "▶ 安装 acme.sh ..."
-  curl -fsSL https://get.acme.sh | sh -s email="mailto:$EMAIL"
+  curl -fsSL https://get.acme.sh | sh
+  ~/.acme.sh/acme.sh --install
 fi
+
+# ========= 显式注册账号（关键修复点） =========
+~/.acme.sh/acme.sh --register-account -m "$EMAIL"
 
 # ========= 申请证书（HTTP-01） =========
 echo "▶ 开始申请证书（HTTP-01 / 80端口）"
