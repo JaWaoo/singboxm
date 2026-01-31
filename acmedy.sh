@@ -11,7 +11,7 @@ command -v socat >/dev/null || { echo "❌ 未安装 socat"; exit 1; }
 read -rp "$(yellow '请输入要申请证书的域名（已解析到本机IP）: ')" DOMAIN
 [[ -z "$DOMAIN" ]] && echo "❌ 域名不能为空" && exit 1
 
-yellow "================================="
+green "==========================================="
 
 read -rp "$(yellow '请输入注册邮箱（回车自动生成）: ')" EMAIL
 
